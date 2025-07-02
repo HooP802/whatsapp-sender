@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Envio WhatsApp</title>
+  <!-- Tailwind CSS v3.4.16 -->
+  <script src="https://cdn.tailwindcss.com?version=3.4.16"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <!-- LOGIN -->
+  <div id="loginView" class="h-screen flex items-center justify-center">
+    <div class="bg-white shadow-md p-6 rounded-xl w-full max-w-sm">
+      <h2 class="text-xl font-semibold mb-4">Login</h2>
+      <input id="senhaInput" type="password" placeholder="Digite a senha"
+             class="w-full border rounded-lg p-2 mb-4" />
+      <button id="loginBtn" class="bg-blue-600 text-white w-full py-2 rounded-lg">
+        Entrar
+      </button>
+      <p id="erroSenha" class="text-red-500 mt-2 hidden">Senha incorreta</p>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="appView" class="hidden p-4 max-w-5xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-bold">Envio de Mensagens WhatsApp</h1>
+      <button onclick="reiniciarStatus()"
+              class="bg-yellow-500 text-white px-3 py-1 rounded text-sm">
+        Reiniciar Status
+      </button>
+    </div>
+
+    <!-- Painel -->
+    <div class="grid md:grid-cols-5 gap-4 mb-4">
+      <div class="bg-white p-4 rounded shadow">
+        <p class="text-sm text-gray-500">Total</p>
+        <p id="totalContatos" class="text-xl font-semibold">0</p>
+      </div>
+      <div class="bg-white p-4 rounded shadow">
+        <p class="text-sm text-gray-500">Pendentes</p>
+        <p id="pendentesContatos" class="text-xl font-semibold">0</p>
+      </div>
+      <div class="bg-white p-4 rounded shadow">
+        <p class="text-sm text-gray-500">Enviados Hoje</p>
+        <p id="enviadosContatos" class="text-xl font-semibold">0</p>
+      </div>
+      <div class="bg-white p-4 rounded shadow">
+        <label class="block text-sm mb-1">Campanha:</label>
+        <select id="campanhaSelect" class="w-full border rounded p-2"></select>
+      </div>
+      <div class="bg-white p-4 rounded shadow">
+        <p class="text-sm text-gray-500">Selecionados</p>
+        <p id="selecionadosContatos" class="text-xl font-semibold">0</p>
+      </div>
+    </div>
+
+    <!-- Ações -->
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <input id="filtroBusca" type="text"
+             placeholder="Buscar por nome ou telefone"
+             class="border rounded p-2 flex-1"
+             oninput="filtrarContatos()" />
+
+      <select id="delaySelect" class="border rounded p-2">
+        <option value="1">1 s</option>
+        <option value="3">3 s</option>
+        <option value="5">5 s</option>
+        <option value="10" selected>10 s</option>
+        <option value="15">15 s</option>
+      </select>
+
+      <button onclick="mostrarCadastro()"
+              class="bg-green-600 text-white px-4 py-2 rounded">
+        + Novo Contato
+      </button>
+      <button onclick="mostrarImportacao()"
+              class="bg-indigo-600 text-white px-4 py-2 rounded">
+        Importar Contatos
+      </button>
+      <button onclick="enviarMensagens()"
+              class="bg-blue-600 text-white px-4 py-2 rounded">
+        Enviar Mensagens
+      </button>
+    </div>
+
+    <!-- Lista de Contatos -->
+    <div id="listaContatos" class="grid gap-2"></div>
+
+    <!-- Notificação Visual -->
+    <div id="notificacao"
+         class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg hidden">
+    </div>
+  </div>
+
+  <script>
+    // —————————————
+    // CONFIGURAÇÃO
+    // —————————————
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwfP4RmT_Ls_Zk8RipGTtUVY8wjL1ulAEj1iMdAqFHA_xqCArqEZzWv6dd5Dev3eQ1C_A/exec';
+    const senhaCorreta = 'adm123';
+    let contatos = [], campanhas = [], modoMobile, selectedContacts = {};
+    let whatsappWin = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      modoMobile = /Mobi|Android/i.test(navigator.userAgent);
+      document.getElementById('loginBtn').addEventListener('click', login);
+      document.getElementById('senhaInput')
+        .addEventListener('keyup', e => { if (e.key === 'Enter') login(); });
+    });
+
+    // —————————————
+    // LOGIN
+    // —————————————
+    function login() {
+      const v = document.getElementById('senhaInput').value;
+      if (v === senhaCorreta) {
+        document.getElementById('erroSenha').classList.add('hidden');
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('appView').classList.remove('hidden');
+        carregarDados();
+      } else {
+        document.getElementById('erroSenha').classList.remove('hidden');
+      }
+    }
+
+    // —————————————
+    // CARREGA CAMPANHAS & CONTATOS
+    // —————————————
+    function carregarDados() {
+      fetch(`${WEB_APP_URL}?func=obterCampanhas`)
+        .then(r => r.json())
+        .then(c => { campanhas = c; renderizarCampanhas(); });
+
+      fetch(`${WEB_APP_URL}?func=obterContatos`)
+        .then(r => r.json())
+        .then(c => { contatos = c; filtrarContatos(); });
+    }
+
+    // —————————————
+    // RENDER CAMPANHAS
+    // —————————————
+    function renderizarCampanhas() {
+      const sel = document.getElementById('campanhaSelect');
+      sel.innerHTML = '<option value="">Selecione...</option>';
+      campanhas.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.nome;
+        o.textContent = c.nome;
+        sel.appendChild(o);
+      });
+    }
+
+    // —————————————
+    // FILTRAR & EXIBIR CONTATOS
+    // —————————————
+    function filtrarContatos() {
+      const termo = document.getElementById('filtroBusca').value.toLowerCase();
+      const lista = document.getElementById('listaContatos');
+      lista.innerHTML = '';
+      contatos.forEach(c => {
+        if (
+          c.nome.toLowerCase().includes(termo) ||
+          c.rawTelefone.includes(termo) ||
+          c.telefone.includes(termo)
+        ) {
+          const div = document.createElement('div');
+          div.className = 'bg-white p-3 rounded shadow flex items-center justify-between';
+          const chk = selectedContacts[c.linha] ? 'checked' : '';
+          div.innerHTML =
+            `<label class="flex items-center gap-2">
+               <input type="checkbox" data-linha="${c.linha}" ${chk}>
+               <span>${c.nome} — ${c.rawTelefone}</span>
+             </label>`;
+          lista.appendChild(div);
+          div.querySelector('input').addEventListener('change', e => {
+            if (e.target.checked) selectedContacts[c.linha] = true;
+            else delete selectedContacts[c.linha];
+            atualizarDashboard();
+          });
+        }
+      });
+      atualizarDashboard();
+    }
+
+    // —————————————
+    // ATUALIZA DASHBOARD
+    // —————————————
+    function atualizarDashboard() {
+      const total    = contatos.length;
+      const selCount = Object.keys(selectedContacts).length;
+      document.getElementById('totalContatos').textContent      = total;
+      document.getElementById('pendentesContatos').textContent  = total - selCount;
+      document.getElementById('enviadosContatos').textContent   = selCount;
+      document.getElementById('selecionadosContatos').textContent = selCount;
+    }
+
+    // —————————————
+    // ENVIO COM REUSO DE ABA
+    // —————————————
+    function enviarMensagens() {
+      const camp = document.getElementById('campanhaSelect').value;
+      if (!camp) { alert('Selecione uma campanha.'); return; }
+
+      let modelo = '';
+      campanhas.forEach(c => { if (c.nome === camp) modelo = c.mensagem; });
+
+      const toSend = Object.keys(selectedContacts)
+        .map(ln => contatos.find(c => c.linha == ln))
+        .filter(Boolean);
+      if (!toSend.length) { alert('Marque ao menos um contato.'); return; }
+
+      const delayMs = parseInt(document.getElementById('delaySelect').value, 10) * 1000;
+      let idx = 0;
+      (function next(){
+        if (idx >= toSend.length) {
+          showNotificacao('Envio concluído!');
+          return;
+        }
+        const c = toSend[idx];
+        const msg = encodeURIComponent(modelo.replace('{{NOME}}', c.nome));
+        const url = modoMobile
+          ? `https://wa.me/55${c.telefone}?text=${msg}`
+          : `https://web.whatsapp.com/send?phone=55${c.telefone}&text=${msg}`;
+
+        if (!whatsappWin || whatsappWin.closed) {
+          whatsappWin = window.open('about:blank', 'whatsappWindow');
+        }
+        whatsappWin.location.href = url;
+        whatsappWin.focus();
+
+        fetch(`${WEB_APP_URL}?func=marcarComoEnviado&linha=${c.linha}&campanha=${encodeURIComponent(camp)}`);
+
+        showNotificacao(`Enviando ➤ ${c.nome}...`);
+        idx++;
+        setTimeout(next, delayMs);
+      })();
+    }
+
+    // —————————————
+    // REINICIAR STATUS
+    // —————————————
+    function reiniciarStatus() {
+      fetch(`${WEB_APP_URL}?func=reiniciarStatus`);
+      selectedContacts = {};
+      showNotificacao('Status reiniciado');
+      setTimeout(carregarDados, 1000);
+    }
+
+    // —————————————
+    // CADASTRO MANUAL
+    // —————————————
+    function mostrarCadastro() {
+      const nome = prompt('Nome:'); if (!nome) return;
+      const tel  = prompt('Telefone:'); if (!tel) return;
+      fetch(`${WEB_APP_URL}?func=adicionarContato&nome=${encodeURIComponent(nome)}&telefone=${encodeURIComponent(tel)}`)
+        .then(() => { showNotificacao('Contato adicionado.'); carregarDados(); });
+    }
+
+    // —————————————
+    // IMPORTAÇÃO
+    // —————————————
+    function mostrarImportacao() {
+      const id = prompt('ID da planilha:'); if (!id) return;
+      fetch(`${WEB_APP_URL}?func=importarContatosDePlanilha&planilhaID=${encodeURIComponent(id)}`)
+        .then(r => r.text())
+        .then(qtd => { showNotificacao(`${qtd} contatos importados.`); carregarDados(); });
+    }
+
+    // —————————————
+    // NOTIFICAÇÃO VISUAL
+    // —————————————
+    function showNotificacao(txt) {
+      const el = document.getElementById('notificacao');
+      el.textContent = txt;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 4000);
+    }
+  </script>
+</body>
+</html>
