@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <!-- Desabilita cache para sempre carregar a versão mais recente -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma"        content="no-cache" />
+  <meta http-equiv="Expires"       content="0" />
   <title>Envio WhatsApp</title>
   <!-- Tailwind CSS v3.4.16 -->
   <script src="https://cdn.tailwindcss.com?version=3.4.16"></script>
@@ -34,7 +38,7 @@
       </button>
     </div>
 
-    <!-- Painel -->
+    <!-- Dashboard + Campanha + Selecionados -->
     <div class="grid md:grid-cols-5 gap-4 mb-4">
       <div class="bg-white p-4 rounded shadow">
         <p class="text-sm text-gray-500">Total</p>
@@ -100,7 +104,7 @@
     // —————————————
     // CONFIGURAÇÃO
     // —————————————
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwfP4RmT_Ls_Zk8RipGTtUVY8wjL1ulAEj1iMdAqFHA_xqCArqEZzWv6dd5Dev3eQ1C_A/exec';
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwk4vIB5rEly1uOf37K2tDlDb8wLUtDgMhsJalt2mP8qIZl-179hkzZzVPhV9IAIbWpeQ/exec';
     const senhaCorreta = 'adm123';
     let contatos = [], campanhas = [], modoMobile, selectedContacts = {};
     let whatsappWin = null;
@@ -148,14 +152,13 @@
       sel.innerHTML = '<option value="">Selecione...</option>';
       campanhas.forEach(c => {
         const o = document.createElement('option');
-        o.value = c.nome;
-        o.textContent = c.nome;
+        o.value = c.nome; o.textContent = c.nome;
         sel.appendChild(o);
       });
     }
 
     // —————————————
-    // FILTRAR & EXIBIR CONTATOS
+    // FILTRAR CONTATOS
     // —————————————
     function filtrarContatos() {
       const termo = document.getElementById('filtroBusca').value.toLowerCase();
@@ -187,7 +190,7 @@
     }
 
     // —————————————
-    // ATUALIZA DASHBOARD
+    // DASHBOARD
     // —————————————
     function atualizarDashboard() {
       const total    = contatos.length;
@@ -199,12 +202,11 @@
     }
 
     // —————————————
-    // ENVIO COM REUSO DE ABA
+    // ENVIO DE MENSAGENS
     // —————————————
     function enviarMensagens() {
       const camp = document.getElementById('campanhaSelect').value;
       if (!camp) { alert('Selecione uma campanha.'); return; }
-
       let modelo = '';
       campanhas.forEach(c => { if (c.nome === camp) modelo = c.mensagem; });
 
@@ -213,12 +215,11 @@
         .filter(Boolean);
       if (!toSend.length) { alert('Marque ao menos um contato.'); return; }
 
-      const delayMs = parseInt(document.getElementById('delaySelect').value, 10) * 1000;
+      const delayMs = parseInt(document.getElementById('delaySelect').value,10)*1000;
       let idx = 0;
       (function next(){
-        if (idx >= toSend.length) {
-          showNotificacao('Envio concluído!');
-          return;
+        if (idx>=toSend.length) {
+          showNotificacao('Envio concluído!'); return;
         }
         const c = toSend[idx];
         const msg = encodeURIComponent(modelo.replace('{{NOME}}', c.nome));
@@ -227,13 +228,12 @@
           : `https://web.whatsapp.com/send?phone=55${c.telefone}&text=${msg}`;
 
         if (!whatsappWin || whatsappWin.closed) {
-          whatsappWin = window.open('about:blank', 'whatsappWindow');
+          whatsappWin = window.open('about:blank','whatsappWindow');
         }
         whatsappWin.location.href = url;
         whatsappWin.focus();
 
         fetch(`${WEB_APP_URL}?func=marcarComoEnviado&linha=${c.linha}&campanha=${encodeURIComponent(camp)}`);
-
         showNotificacao(`Enviando ➤ ${c.nome}...`);
         idx++;
         setTimeout(next, delayMs);
@@ -241,43 +241,30 @@
     }
 
     // —————————————
-    // REINICIAR STATUS
+    // RESTANTE DAS FUNÇÕES
     // —————————————
     function reiniciarStatus() {
       fetch(`${WEB_APP_URL}?func=reiniciarStatus`);
       selectedContacts = {};
       showNotificacao('Status reiniciado');
-      setTimeout(carregarDados, 1000);
+      setTimeout(carregarDados,1000);
     }
-
-    // —————————————
-    // CADASTRO MANUAL
-    // —————————————
     function mostrarCadastro() {
-      const nome = prompt('Nome:'); if (!nome) return;
-      const tel  = prompt('Telefone:'); if (!tel) return;
-      fetch(`${WEB_APP_URL}?func=adicionarContato&nome=${encodeURIComponent(nome)}&telefone=${encodeURIComponent(tel)}`)
-        .then(() => { showNotificacao('Contato adicionado.'); carregarDados(); });
+      const n=prompt('Nome:'); if(!n) return;
+      const t=prompt('Telefone:'); if(!t) return;
+      fetch(`${WEB_APP_URL}?func=adicionarContato&nome=${encodeURIComponent(n)}&telefone=${encodeURIComponent(t)}`)
+        .then(()=>{ showNotificacao('Contato adicionado.'); carregarDados(); });
     }
-
-    // —————————————
-    // IMPORTAÇÃO
-    // —————————————
     function mostrarImportacao() {
-      const id = prompt('ID da planilha:'); if (!id) return;
+      const id=prompt('ID da planilha:'); if(!id) return;
       fetch(`${WEB_APP_URL}?func=importarContatosDePlanilha&planilhaID=${encodeURIComponent(id)}`)
-        .then(r => r.text())
-        .then(qtd => { showNotificacao(`${qtd} contatos importados.`); carregarDados(); });
+        .then(r=>r.text()).then(q=>{ showNotificacao(q+' contatos importados.'); carregarDados(); });
     }
-
-    // —————————————
-    // NOTIFICAÇÃO VISUAL
-    // —————————————
-    function showNotificacao(txt) {
-      const el = document.getElementById('notificacao');
-      el.textContent = txt;
+    function showNotificacao(txt){
+      const el=document.getElementById('notificacao');
+      el.textContent=txt;
       el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), 4000);
+      setTimeout(()=>el.classList.add('hidden'),4000);
     }
   </script>
 </body>
